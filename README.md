@@ -4,6 +4,8 @@
 
 使用本地 KaTeX（不依赖任何外部 CDN），仅最小化修改 CSP，不引入第三方脚本风险。
 
+渲染范围仅限 Claude 的输出消息，不影响用户输入文本框。
+
 ## 支持的语法
 
 | 语法 | 说明 |
@@ -38,7 +40,21 @@ node patch_latex.js --restore
 - 适用平台：**VSCode Remote (WSL)**，扩展位于 `~/.vscode-server/extensions/`
 - 适用扩展版本：`anthropic.claude-code-2.1.31` 及以上
 - **扩展更新后补丁会被覆盖**，需重新执行 `node patch_latex.js`
-- 补丁会自动备份原始 `extension.js` 为 `extension.js.bak`，重复打补丁是安全的
+- 补丁会自动备份 `extension.js` 和 `webview/index.js`，重复打补丁是安全的
+
+## 实现原理
+
+补丁修改扩展的两个文件：
+
+1. **`extension.js`**（WebView HTML 模板）
+   - 追加 `cspSource` 到 `script-src`，允许加载本地扩展资源
+   - 注入 `window.__KATEX_BASE__` 内联脚本（指向 webview 目录的 URI）
+   - 注入 `<script src="latex-render.js">` 标签
+
+2. **`webview/index.js`**（React 前端 bundle）
+   - 在 react-markdown 把 markdown 字符串赋给 VFile 之前，预处理 `\[...\]` 和 `\(...\)` 为 Unicode 占位符（`⟦⟧` / `⟨⟩`），绕过 remark-parse 对反斜杠的转义处理
+
+`latex-render.js` 通过 MutationObserver 监听 DOM 变化，在 `[data-testid="assistant-message"]` 范围内遍历文本节点，识别公式语法后调用 KaTeX 渲染。
 
 ## 文件说明
 
